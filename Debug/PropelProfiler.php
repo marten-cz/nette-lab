@@ -38,6 +38,8 @@ class PropelProfiler implements \Nette\IDebugPanel
 
 	/** @var bool  explain queries? */
 	public $explainQuery = false;
+	
+	public $trace = false;
 
 	public function __construct(array $configParam)
 	{
@@ -71,6 +73,11 @@ class PropelProfiler implements \Nette\IDebugPanel
 		if (isset($configParam['explain']))
 		{
 			$this->explainQuery = (bool) $configParam['explain'];
+		}
+		
+		if (isset($configParam['trace']))
+		{
+			$this->trace = (bool) $configParam['trace'];
 		}
 	}
 
@@ -157,10 +164,28 @@ class PropelProfiler implements \Nette\IDebugPanel
 			'memory' => trim($mem),
 			'query' => trim($query),
 			'explain' => $explain,
-			'method' => $trace[2]['class'].'->'.$trace[2]['function'].' in '.$trace[1]['file'].' at '.$trace[1]['line']
+			'method' => $trace[2]['class'].'->'.$trace[2]['function'].' in '.$trace[1]['file'].' at '.$trace[1]['line'],
+			'trace' => ($this->trace ? $this->formatTrace($trace) : null),
 		);
 	}
 
+	protected function formatTrace($trace)
+	{
+		$ret = array();
+		foreach($trace as $k => $v)
+		{
+			$ret[] = array(
+				'class' => @$v['class'],
+				'function' => @$v['function'],
+				'type' => @$v['type'],
+				'file' => @$v['file'],
+				'line' => @$v['line'],
+			);
+		}
+		
+		return $ret;
+	}
+	
 	public function getLog()
 	{
 		return $log;
@@ -222,10 +247,25 @@ class PropelProfiler implements \Nette\IDebugPanel
 		{
 			$content .= "
 <tr {$classes[++$i%2]}>
-	<td>" . sprintf('%0.3f', $v['time'] * 1000) . (!empty($v['explain']) ? "
-	<br /><a href='#' class='nette-toggler' rel='#nette-debug-PropelProfiler-row-$i'>explain&nbsp;&#x25ba;</a>" : '') . "</td>
+	<td>" . sprintf('%0.3f', $v['time'] * 1000) .
+	(!empty($v['explain']) ? "
+	<br /><a href='#' class='nette-toggler' rel='#nette-debug-PropelProfiler-row-$i'>explain&nbsp;&#x25ba;</a>" : '') .
+	(!empty($v['trace']) ? "
+	<br /><a href='#' class='nette-toggler' rel='#nette-debug-PropelProfiler-trace-$i'>backtrace&nbsp;&#x25ba;</a>" : '') . "</td>
 	<td class='propel-sql'>" . $v['query'] . (!empty($v['explain']) ? "
-	<div id='nette-debug-PropelProfiler-row-$i'>{$v['explain']}</div>" : '') . "</td>
+	<div id='nette-debug-PropelProfiler-row-$i'>{$v['explain']}</div>" : '');
+			
+			if(!empty($v['trace']))
+			{
+				$content .= '<div id="nette-debug-PropelProfiler-trace-'.$i.'"><table class="dump"><thead><tr><th>File</th><th>Method</th><th>Line</th></tr></thead><tbody>';
+				foreach($v['trace'] as $vt)
+				{
+					$content .= @"<tr><td>{$vt['file']}</td><td>{$vt['class']}{$vt['type']}{$vt['function']}</td><td>{$vt['line']}</td></tr>";
+				}
+				$content .= '<tbody></table></div>';
+			}
+			
+			$content .= "</td>
 	<td>{$v['memory']}</td>
 </tr>
 ";
