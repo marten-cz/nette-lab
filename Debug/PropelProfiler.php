@@ -24,7 +24,7 @@ use PropelConfiguration;
  * <code>
  * new NetteLab\Debug\PropelProfiler(array());
  * </code>
- * 
+ *
  * @author	Martin Malek
  * @version	0.1-dev
  */
@@ -39,7 +39,7 @@ class PropelProfiler implements \Nette\IDebugPanel
 	/** @var bool  explain queries? */
 	public $explainQuery = false;
 
-	public function __construct(array $config)
+	public function __construct(array $configParam)
 	{
 		if (is_callable('Nette\Debug::addPanel'))
 		{
@@ -63,72 +63,87 @@ class PropelProfiler implements \Nette\IDebugPanel
 
 		$this->useFirebug = isset($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'FirePHP/');
 
-		if (isset($config['filter']))
+		if (isset($configParam['filter']))
 		{
-			$this->setFilter($config['filter']);
+			$this->setFilter($configParam['filter']);
 		}
 
-		if (isset($config['explain']))
+		if (isset($configParam['explain']))
 		{
-			$this->explainQuery = (bool) $config['explain'];
+			$this->explainQuery = (bool) $configParam['explain'];
 		}
 	}
 
 	public function emergency($m)
 	{
 		$this->log($m, Propel::LOG_EMERG);
-	} 
-	
+	}
+
 	public function alert($m)
 	{
 		$this->log($m, Propel::LOG_ALERT);
 	}
-	
+
 	public function crit($m)
 	{
 		$this->log($m, Propel::LOG_CRIT);
 	}
-	
+
 	public function err($m)
 	{
 		$this->log($m, Propel::LOG_ERR);
 	}
-	
+
 	public function warning($m)
 	{
 		$this->log($m, Propel::LOG_WARNING);
 	}
-	
+
 	public function notice($m)
 	{
 		$this->log($m, Propel::LOG_NOTICE);
 	}
-	
+
 	public function info($m)
 	{
 		$this->log($m, Propel::LOG_INFO);
 	}
-	
+
 	public function debug($m)
 	{
 		$this->log($m, Propel::LOG_DEBUG);
 	}
-	
+
 	public function log($m, $priority)
 	{
-		list($method, $time, $mem, $query) = explode('|', $m, 4);
-		list(,$mem) = explode(':', trim($mem));
-		list(,$time) = explode(':', trim($time));
-		list($time,) = explode(' ', trim($time));
+		if(substr_count($m, '|') == 3)
+		{
+			@list($method, $time, $mem, $query) = explode('|', $m, 4);
+			@list(,$mem) = explode(':', trim($mem));
+			@list(,$time) = explode(':', trim($time));
+			@list($time,) = explode(' ', trim($time));
+		}
+		else
+		{
+			$query = $m;
+			$time = 0;
+			$mem = 0;
+			$method = '';
+		}
 		
 		$explain = null;
 		// @TODO get the explain information for query
 		if ($this->explainQuery && strpos(strtolower(trim($query)), 'select') === 0)
 		{
-			$tmpSql = dibi::$sql;
+			//$tmpSql = \dibi::query($query);
 			try
 			{
-				$explain = dibi::dump('EXPLAIN ' . $query, TRUE);
+				$prof = \dibi::getConnection()->getProfiler(NULL);
+				try {
+					$explain = \dibi::dump(\dibi::getConnection()->setProfiler(NULL)->nativeQuery('EXPLAIN ' . $query), TRUE);
+				} catch (DibiException $e) {}
+				\dibi::getConnection()->setProfiler($prof);
+				//$explain = \dibi::dump('EXPLAIN ' . $query, TRUE);
 			}
 			catch (DibiException $e) {}
 		}
@@ -145,12 +160,12 @@ class PropelProfiler implements \Nette\IDebugPanel
 			'method' => $trace[2]['class'].'->'.$trace[2]['function'].' in '.$trace[1]['file'].' at '.$trace[1]['line']
 		);
 	}
-	
+
 	public function getLog()
 	{
 		return $log;
 	}
-	
+
 	public function getSumTime()
 	{
 		$sum = (float)0.000000;
@@ -158,34 +173,34 @@ class PropelProfiler implements \Nette\IDebugPanel
 		{
 			$sum += (float)sprintf('%0.6f', $v['time']);
 		}
-		
+
 		return $sum;
 	}
-	
+
 	public function getId()
 	{
 		return 'PropelProfiler';
 	}
-	
+
 	public function getTab()
 	{
 		return '<img src="data:image/gif;base64,R0lGODlhEQAQAMQYAPT09Pj4+P39/f7+/vLy8vv7+/n5+d3d3fHx8ejo6OTk5OXl5fr6+nh4eO7u7vX19fz8/Orq6s/Pz6Kiotra2n5+fjMzM////////wAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEAABgALAAAAAARABAAAAVmIIZVZGmKqFhdbMuSqeq6axWv80tRNornpt4oN+NhAgEJ0XWYMAaDpUtBQFiu1ws2a7kkAleBoNVldbsO8PZMiADOF0GhAYhq79oz4AKArPNYgFcGBntSFwULDyo7jY6NQkGSJRghADs%3D"> '.count($this->log).' queries in '.sprintf('%0.1f', $this->getSumTime()*1000).'ms';
 	}
-	
+
 	public function renderTab()
 	{
 		echo $this->getTab();
 	}
-	
+
 	public function getPanel()
 	{
 		$total_time = 0.0000;
-		
+
 		foreach($this->log as $v)
 		{
 			$total_time += $v['time'] * 1000;
 		}
-		
+
 		$content = "
 <h1>Queries: " . count($this->log) . ($total_time > 0 ? ', time: ' . sprintf('%0.3f', $total_time) . ' ms' : '') . "</h1>
 
@@ -218,7 +233,7 @@ class PropelProfiler implements \Nette\IDebugPanel
 		$content .= '</table></div>';
 		return $content;
 	}
-	
+
 	public function renderPanel()
 	{
 		echo $this->getPanel();
@@ -228,7 +243,7 @@ class PropelProfiler implements \Nette\IDebugPanel
 	{
 		//echo "<p style='color: $color'>$message</p>";
 	}
-	
+
 	private function priorityToColor($priority)
 	{
 		switch($priority)
@@ -238,7 +253,7 @@ class PropelProfiler implements \Nette\IDebugPanel
 			case Propel::LOG_CRIT:
 			case Propel::LOG_ERR:
 				return 'red';
-			break;       
+			break;
 			case Propel::LOG_WARNING:
 				return 'orange';
 			break;
